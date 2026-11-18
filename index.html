@@ -148,7 +148,7 @@ table{border-collapse:collapse;width:100%;font-size:13px}
 th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
 th{background:var(--surface-2);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);position:sticky;top:0;z-index:2}
 th button{border:0;background:none;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;padding:0}
-th.r,td.r{text-align:right}
+th.r,td.r{text-align:center}
 td.wrapc{white-space:normal;min-width:240px;max-width:420px;color:var(--muted)}
 tbody tr:hover td{background:var(--surface-2)}
 tr.hot td{background:var(--red-soft)}
@@ -174,7 +174,7 @@ button.st:hover{outline:1px solid var(--red-line)}
 .pgrid th.fx{background:var(--surface-2);z-index:3}
 .pgrid td.f1,.pgrid th.f1{left:0;min-width:64px}
 .pgrid td.f2,.pgrid th.f2{left:64px;min-width:210px;max-width:210px;overflow:hidden;text-overflow:ellipsis}
-.pgrid td.tot{padding:5px 8px;text-align:right}
+.pgrid td.tot{padding:5px 8px;text-align:center}
 .cd{width:34px;min-width:34px;height:28px;text-align:center;font-weight:700;font-size:10.5px;position:relative}
 .cd.ed{cursor:pointer}
 .cd.ed:hover{outline:2px solid var(--red-hi);outline-offset:-2px}
@@ -1567,7 +1567,7 @@ $('#view').addEventListener('change',function(e){var t=e.target;
 $('#view').addEventListener('input',function(e){if(e.target.id==='bhq'){S.ui.bhq=e.target.value;var pos=e.target.selectionStart;render();var n=$('#bhq');if(n){n.focus();n.setSelectionRange(pos,pos)}}});
 
 /* ---------- VAGAS: solicitação, aprovação do Master, status e SLA ---------- */
-var VST=[['aguardando','Aguardando aprovação do Master','wa'],['office','Pendente de aprovação do Office','wa'],['claro','Pendente de aprovação da Claro','wa'],['doc','Documentação',''],['fechada','Fechada (vaga preenchida)','ok'],['reprovado','Reprovado','no']];
+var VST=[['aguardando','Aguardando aprovação do Gestor','wa'],['office','Pendente de aprovação do Office','wa'],['claro','Pendente de aprovação da Claro','wa'],['doc','Documentação',''],['fechada','Fechada (vaga preenchida)','ok'],['reprovado','Reprovado','no']];
 var VSTL={};VST.forEach(function(s){VSTL[s[0]]=s});
 var VPOS=['office','claro','doc','fechada','reprovado'];
 var VMOT=['Aumento de quadro','Substituição','Temporária'];
@@ -1609,7 +1609,7 @@ function vVagas(){
   var tb=L.length?'<div class="tbx"><table><thead><tr><th>Nº</th><th>Solicitada em</th><th>Base</th><th>Região</th><th>Cargo</th><th class="r">Qtd</th><th>Motivo</th><th>Solicitante</th><th>Status</th><th>Aprovada em</th><th class="r">Dias em aberto</th><th>SLA</th><th>Última observação</th><th></th></tr></thead><tbody>'+
     L.map(function(v){var s=vSlaSt(v),d=vDias(v);return '<tr class="'+(s[1]==='no'&&!vEnc(v)?'hot':'')+'"><td><b>'+esc(v.num||'')+'</b></td><td>'+dbr((v.criadoEm||'').slice(0,10))+'</td><td>'+esc(v.base)+'</td><td>'+esc(v.regiao||'—')+'</td><td>'+esc(title(v.cargo))+'</td><td class="r">'+esc(v.qtd||1)+'</td><td>'+esc(v.motivo||'')+(v.subst?'<br><small class="note">no lugar de '+esc(v.subst)+'</small>':'')+'</td><td>'+esc(v.solic&&v.solic.nome||'')+'</td><td>'+(canSt&&v.aprov&&v.aprov.st==='aprovada'?'<select data-vgst="'+esc(v.id)+'" aria-label="Status da vaga" style="width:auto;font-size:12px;padding:4px 6px">'+VPOS.map(function(k){return '<option value="'+k+'"'+(v.status===k?' selected':'')+'>'+esc(VSTL[k][1].replace(' (vaga preenchida)',''))+'</option>'}).join('')+'</select>':vagaPill(v.status))+'</td><td>'+(v.aprov&&v.aprov.st==='aprovada'?dbr(v.aprov.em.slice(0,10)):v.status==='aguardando'?'<span class="note">há '+vEspera(v)+' d</span>':'—')+'</td><td class="r"><b>'+(d==null?'—':d)+'</b></td><td><span class="st '+s[1]+'">'+esc(s[0])+'</span></td><td class="wrapc">'+esc(vLastObs(v))+'</td><td><button type="button" class="btn sm'+(isM&&v.status==='aguardando'?' red':'')+'" data-vg="abrir" data-id="'+esc(v.id)+'">'+(isM&&v.status==='aguardando'?'Analisar':'Abrir')+'</button></td></tr>'}).join('')+'</tbody></table></div>':
     '<p class="note">'+(all.length?'Nenhuma vaga nos filtros escolhidos.':'Nenhuma vaga solicitada ainda. Use “+ Solicitar vaga”.')+'</p>';
-  return h+card('Solicitações de vagas',(isM?'Você aprova ou reprova as solicitações. ':'Toda solicitação passa pela aprovação do Master antes de ser trabalhada. ')+'O tempo em aberto conta a partir da aprovação; o SLA vale até o fechamento.',bar+tb,tools)}
+  return h+card('Solicitações de vagas',(isM?'Você aprova ou reprova as solicitações. ':'Toda solicitação passa pela aprovação do Gestor antes de ser trabalhada. ')+'O tempo em aberto conta a partir da aprovação; o SLA vale até o fechamento.',bar+tb,tools)}
 function vSave(v){var d=JSON.parse(JSON.stringify(v)),prev=S.vagas[v.id];S.vagas[v.id]=d;return S.db.doc('vagas/'+v.id).set(d).catch(function(e){if(prev)S.vagas[v.id]=prev;else delete S.vagas[v.id];var x=new Error('x');x.uMsg=e&&e.code==='permission_denied'?'Seu perfil não tem permissão para esta ação.':'Não foi possível salvar. Tente de novo.';throw x})}
 function vHist(v,acao,obs,st){(v.hist=v.hist||[]).push({t:new Date().toISOString(),u:myId(),por:myName(),acao:acao,obs:obs||'',status:st||v.status})}
 function vNova(){
@@ -1626,7 +1626,7 @@ function vNova(){
     '<label>Escala / turno<input type="text" id="vbT" placeholder="Ex.: 6x1, 08h às 17h"></label>'+
     '<label>Data desejada de início<input type="date" id="vbD"></label>'+
     '<label class="full">Justificativa / observação<textarea id="vbO" rows="3" style="width:100%;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:8px;font:inherit"></textarea></label></div>'+
-    '<p class="note" style="margin:0">A vaga fica como “Aguardando aprovação do Master” e só começa a ser trabalhada depois de aprovada.</p>','Enviar solicitação',
+    '<p class="note" style="margin:0">A vaga fica como “Aguardando aprovação do Gestor” e só começa a ser trabalhada depois de aprovada.</p>','Enviar solicitação',
     async function(){var c=$('#vbC').value==='__outro'?$('#vbCo').value.trim().toUpperCase():$('#vbC').value,q=Math.max(1,parseInt($('#vbQ').value,10)||1);if(!c){var x=new Error('x');x.uMsg='Selecione o cargo.';throw x}
       var now=new Date(),id='vg_'+now.getTime().toString(36)+'_'+Math.random().toString(36).slice(2,6),num='VG-'+todayISO().slice(2).replace(/-/g,'')+'-'+String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0')+String(now.getSeconds()).padStart(2,'0');
       var v={id:id,num:num,base:$('#vbB').value,regiao:$('#vbR').value.trim(),cargo:c,qtd:q,motivo:$('#vbM').value,subst:$('#vbS').value.trim(),turno:$('#vbT').value.trim(),inicio:$('#vbD').value||'',just:$('#vbO').value.trim(),
@@ -1672,14 +1672,14 @@ async function vPdf(id){
   sec('Dados da vaga',[['Base',v.base||'—','Região',v.regiao||'—'],['Cargo',title(v.cargo)||'—','Quantidade',String(v.qtd||1)],['Motivo',v.motivo||'—','Substitui',v.subst||'—'],['Escala / turno',v.turno||'—','Início desejado',v.inicio?dbr(v.inicio):'—']]);
   if(v.just)doc.autoTable({startY:y-4,margin:{left:M,right:M},theme:'grid',body:[['Justificativa',v.just]],styles:{fontSize:8.5,cellPadding:5,textColor:[30,30,30]},columnStyles:{0:{fontStyle:'bold',fillColor:[244,243,240],cellWidth:95}}}),y=doc.lastAutoTable.finalY+10;
   sec('Solicitação',[['Solicitante',v.solic&&v.solic.nome||'—','E-mail',v.solic&&v.solic.email||'—'],['Solicitada em',fdt(v.criadoEm),'Espera pela aprovação',vEspera(v)+(vEspera(v)===1?' dia':' dias')]]);
-  sec('Aprovação do Master',[['Decisão',ap.st==='aprovada'?'APROVADA':ap.st==='reprovada'?'REPROVADA':'AGUARDANDO APROVAÇÃO','Data',ap.em?fdt(ap.em):'—'],['Responsável',ap.por||'—','Observação',apH&&apH.obs||'—']]);
+  sec('Aprovação do Gestor',[['Decisão',ap.st==='aprovada'?'APROVADA':ap.st==='reprovada'?'REPROVADA':'AGUARDANDO APROVAÇÃO','Data',ap.em?fdt(ap.em):'—'],['Responsável',ap.por||'—','Observação',apH&&apH.obs||'—']]);
   sec('Dados complementares',[['Uniforme',c.uni||'—','Calçado',c.calc||'—'],['Previsão de ETN',c.etn?dbr(c.etn):'—','Fechamento',v.status==='fechada'&&v.encEm?fdt(v.encEm):'—']]);
   doc.autoTable({startY:y,margin:{left:M,right:M},theme:'grid',head:[['Data e hora','Responsável','Ação','Status','Observação']],
     body:hist.length?hist.map(function(x){return [fdt(x.t),x.por||'',x.acao||'',(VSTL[x.status]||[0,x.status||''])[1],x.obs||'']}):[['—','','Sem registros no histórico','','']],
     headStyles:{fillColor:[226,13,31],textColor:255,fontSize:8.5},styles:{fontSize:7.8,cellPadding:4,textColor:[30,30,30]},columnStyles:{0:{cellWidth:88},1:{cellWidth:80},2:{cellWidth:85},3:{cellWidth:95}},
     didDrawPage:function(){}});y=doc.lastAutoTable.finalY+20;
   if(y>H-110){doc.addPage();y=60}
-  var sg=[['Solicitante',v.solic&&v.solic.nome||''],['Aprovação (Master)',ap.st==='aprovada'?ap.por||'':''],['Recursos Humanos','']],sw=(W-2*M-40)/3;
+  var sg=[['Solicitante',v.solic&&v.solic.nome||''],['Aprovação (Gestor)',ap.st==='aprovada'?ap.por||'':''],['Recursos Humanos','']],sw=(W-2*M-40)/3;
   doc.setFontSize(8);sg.forEach(function(g,i){var x=M+i*(sw+20);doc.setDrawColor(90,90,90);doc.line(x,y+40,x+sw,y+40);doc.setFont('helvetica','bold');doc.text(g[0],x+sw/2,y+52,{align:'center'});doc.setFont('helvetica','normal');if(g[1])doc.text(g[1],x+sw/2,y+63,{align:'center'})});
   var n=doc.internal.getNumberOfPages();for(var p=1;p<=n;p++){doc.setPage(p);doc.setFontSize(7);doc.setTextColor(120,120,120);doc.text('Danlex Serviços · ERP de Pessoas · '+(v.num||'')+' · página '+p+' de '+n,W/2,H-18,{align:'center'})}
   var r=await S.dl.save({filename:'solicitacao_vaga_'+(v.num||id)+'.pdf',data:doc.output('arraybuffer')});if(r&&r.status==='saved')toast('PDF da solicitação salvo','ok')
