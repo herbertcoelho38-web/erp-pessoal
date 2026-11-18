@@ -582,10 +582,12 @@ function loginUI(mode,msg,err){
   if(mode==='criar')f+='<p class="note" style="margin:0">Use o mesmo e-mail cadastrado pelo Master na tela Usuários. Você receberá um e-mail para confirmar o cadastro.</p>';
   if(msg)f+='<div class="okmsg">'+esc(msg)+'</div>';if(err)f+='<div class="err">'+esc(err)+'</div>';
   f+='<button type="submit" class="btn red block" id="sbGo">'+({entrar:'Entrar',criar:'Criar senha',esqueci:'Enviar link de recuperação',nova:'Salvar nova senha'}[mode])+'</button>';
-  if(mode==='entrar')f+='<div class="lk"><button type="button" class="linkb" data-m="criar">Primeiro acesso? Criar senha</button><button type="button" class="linkb" data-m="esqueci">Esqueci a senha</button></div>';
+  if(mode==='entrar')f+='<p class="note" style="margin:0">Seu acesso e sua senha são criados pelo Master do ERP.</p><div class="lk"><button type="button" class="linkb" data-m="esqueci">Esqueci a senha</button></div>';
   else if(mode!=='nova')f+='<div class="lk"><button type="button" class="linkb" data-m="entrar">Voltar para o login</button></div>';
+  else f+='<div class="lk"><button type="button" class="linkb" id="sbCanc">Cancelar</button></div>';
   f+='</form></div>';el.innerHTML=f;el.hidden=false;
   el.querySelectorAll('[data-m]').forEach(function(b){b.onclick=function(){loginUI(b.dataset.m)}});
+  var cc=document.getElementById('sbCanc');if(cc)cc.onclick=function(){history.replaceState(null,'',location.pathname);location.reload()};
   var em=document.getElementById('sbE');if(em)em.focus();
   document.getElementById('sbF').onsubmit=async function(e){e.preventDefault();var bt=document.getElementById('sbGo');bt.disabled=true;
     var E=em?em.value.trim().toLowerCase():'',pe=document.getElementById('sbP'),P=pe?pe.value:'',r;
@@ -615,6 +617,31 @@ var db={
     set:async function(data){var d=JSON.parse(JSON.stringify(data));var r=await sb.from('erp_docs').upsert({col:col,id:id,data:d,updated_at:new Date().toISOString()});if(r.error){var e=new Error(r.error.message);e.code=/row-level|permission|violates/i.test(r.error.message)?'permission_denied':'error';throw e}(cache[col]=cache[col]||{})[id]=d;emit(col)},
     delete:async function(){var r=await sb.from('erp_docs').delete().eq('col',col).eq('id',id);if(r.error){var e=new Error(r.error.message);e.code='permission_denied';throw e}if(cache[col])delete cache[col][id];emit(col)}}}};
 var downloads={save:async function(o){var b=new Blob([o.data]),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=o.filename;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(u);a.remove()},2000);return {status:'saved'}}};
+
+function genPw(){var a='ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789',r=new Uint32Array(10),o='';crypto.getRandomValues(r);for(var i=0;i<10;i++)o+=a[r[i]%a.length];return o}
+function senhaDlg(u){
+  var em=(u&&u.email||'').toLowerCase(),nome=u&&u.nome||em,box=document.createElement('div');box.className='ovl';box.id='sbDlg';
+  function close(){box.remove()}
+  function draw(msg,err,done){
+    box.innerHTML='<div class="modal" role="dialog" aria-modal="true"><div class="mh"><div><div class="eyebrow">Acesso ao ERP</div><h2>'+esc(nome)+'</h2></div><button type="button" class="x" id="sdX" aria-label="Fechar">×</button></div><div class="mb">'+
+      (done?'<div class="okmsg">'+esc(msg)+'</div><p class="note" style="margin:0">Envie a mensagem abaixo para a pessoa. A senha não fica visível depois que esta janela for fechada.</p><textarea id="sdTxt" readonly style="width:100%;min-height:120px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px;font:13px/1.5 var(--f-body)">'+esc(done)+'</textarea><div class="mfoot"><button type="button" class="btn red" id="sdCopy">Copiar mensagem</button><button type="button" class="btn" id="sdOk">Fechar</button></div>':
+      '<p class="note" style="margin:0">E-mail de login: <b style="color:var(--ink)">'+esc(em)+'</b>. Se a pessoa já tiver acesso, a senha antiga é substituída por esta.</p><div class="form"><label class="full">Senha (mínimo 8 caracteres)<div style="display:flex;gap:8px"><input type="text" id="sdPw" value="'+genPw()+'" autocomplete="off" style="font-size:15px;letter-spacing:.04em"><button type="button" class="btn" id="sdGen">Gerar outra</button></div></label></div>'+
+      (err?'<div class="err">'+esc(err)+'</div>':'')+'<div class="mfoot"><button type="button" class="btn" id="sdC">Cancelar</button><button type="button" class="btn red" id="sdSave">Salvar acesso</button></div>')+'</div></div>';
+    box.querySelector('#sdX').onclick=close;
+    var g=box.querySelector('#sdGen');if(g)g.onclick=function(){box.querySelector('#sdPw').value=genPw()};
+    var c=box.querySelector('#sdC');if(c)c.onclick=close;var ok=box.querySelector('#sdOk');if(ok)ok.onclick=close;
+    var cp=box.querySelector('#sdCopy');if(cp)cp.onclick=function(){var t=box.querySelector('#sdTxt');t.select();try{navigator.clipboard.writeText(t.value).then(function(){cp.textContent='Copiado'},function(){document.execCommand('copy');cp.textContent='Copiado'})}catch(x){document.execCommand('copy');cp.textContent='Copiado'}};
+    var sv=box.querySelector('#sdSave');if(sv)sv.onclick=async function(){var pw=box.querySelector('#sdPw').value.trim();if(pw.length<8){draw(null,'A senha precisa ter pelo menos 8 caracteres.');return}
+      sv.disabled=true;sv.textContent='Salvando…';
+      try{var r=await sb.functions.invoke('erp-usuario',{body:{email:em,senha:pw}});var d=r.data,e=r.error;
+        if(e){var m=e.message;try{var j=await e.context.json();if(j&&j.erro)m=j.erro}catch(x){}throw new Error(m)}
+        if(!d||!d.ok)throw new Error(d&&d.erro||'Falha ao salvar');
+        var link=location.origin+'/';
+        draw(d.acao==='criado'?'Acesso criado.':'Senha redefinida.',null,'Olá, '+nome+'! Seu acesso ao ERP de Pessoas · Danlex está pronto.\nLink: '+link+'\nE-mail: '+em+'\nSenha: '+pw+'\nDepois de entrar, você pode trocar a senha em "Alterar senha".')}
+      catch(x){draw(null,String(x&&x.message||x))}};
+  }
+  draw();document.body.appendChild(box);
+}
 async function boot(){
   if(/type=recovery/.test(location.hash)){loginUI('nova');return}
   var s=(await sb.auth.getSession()).data.session;
@@ -624,6 +651,8 @@ async function boot(){
   var user={me:async function(){return {id:u.id,email:em,name:(u.user_metadata&&u.user_metadata.nome)||em.split('@')[0],isOwner:em===OWNER,canEdit:true}},can:async function(){return true}};
   window.claude={use:async function(n){return n==='db'?db:n==='user'?user:n==='downloads'?downloads:null}};
   window.__sbSair=async function(){await sb.auth.signOut();location.reload()};
+  window.__sbTrocar=function(){loginUI('nova')};
+  window.__sbSenhaDlg=senhaDlg;
 }
 boot();
 })();
@@ -917,6 +946,7 @@ function drawRole(){
   $('#roleSub').textContent=r?(r.bases==='*'?'Todas as bases':(r.bases.length?r.bases.join(', '):'Nenhuma base vinculada')):'';
   $('#btnImport').hidden=!can('import');
   if(window.__sbSair&&!$('#sbOut')){var so=document.createElement('button');so.type='button';so.className='linkb';so.id='sbOut';so.textContent='Sair';so.onclick=window.__sbSair;$('#role').appendChild(so)}
+  if(window.__sbTrocar&&!$('#sbPw2')){var tp=document.createElement('button');tp.type='button';tp.className='linkb';tp.id='sbPw2';tp.textContent='Alterar senha';tp.onclick=window.__sbTrocar;$('#role').appendChild(tp)}
   $('#btnBkp').hidden=!can('users');$('#btnRest').hidden=!(can('users')&&window.__SB);
   var lo=$('#codeOut');if(r&&r.viaCode&&!lo){var a=document.createElement('button');a.type='button';a.className='linkb';a.id='codeOut';a.textContent='Sair (esquecer o código neste navegador)';a.onclick=function(){lsSet('erp_codigo','');S._memCode='';render()};$('#role').appendChild(a)}else if((!r||!r.viaCode)&&lo)lo.remove();
 }
@@ -1464,7 +1494,7 @@ function vUsuarios(){
   var reqs=Object.keys(S.reqs||{}).map(function(k){return S.reqs[k]}).filter(function(r){return r&&r.id&&!users.some(function(u){return u.id===r.id})});
   if(reqs.length)h+=card('Pedidos de acesso',reqs.length+' pendente(s) · aprovar abre o cadastro já com a pessoa selecionada','<div class="tbx"><table><thead><tr><th>Pessoa</th><th>E-mail</th><th>Pedido em</th><th></th></tr></thead><tbody>'+reqs.map(function(r){return '<tr><td data-rid="'+esc(r.id)+'">Pessoa sem nome visível</td><td>'+esc(r.email||'—')+'</td><td>'+new Date(r.em).toLocaleString('pt-BR')+'</td><td><div class="tools"><button type="button" class="btn sm red" data-rok="'+esc(r.id)+'">Aprovar</button><button type="button" class="btn sm ghost" data-rno="'+esc(r.id)+'"'+(S.platAdmin?'':' disabled')+'>Recusar</button></div></td></tr>'}).join('')+'</tbody></table></div>');
   h+=card('Usuários cadastrados',int(users.length)+' usuário(s) · o proprietário do ERP é sempre Master',
-    users.length?'<div class="tbx"><table><thead><tr><th>Usuário</th><th>E-mail</th><th>Código de acesso</th><th>Perfil</th><th>Bases</th><th>Criado em</th><th></th></tr></thead><tbody>'+users.map(function(u,i){return '<tr><td data-uid="'+esc(u.id||'')+'" data-unome="'+esc(u.nome||'')+'">'+esc(u.nome||'—')+'</td><td>'+esc(u.email||'—')+'</td><td>'+(u.codigo?'<b style="letter-spacing:.08em">'+esc(u.codigo)+'</b> <button type="button" class="btn sm" data-ucopy="'+esc(u.codigo)+'">Copiar</button>':'<button type="button" class="btn sm" data-ugen="'+i+'"'+(S.platAdmin?'':' disabled')+'>Gerar código</button>')+'</td><td><span class="st '+(u.perfil==='master'?'no':u.perfil==='editor'?'wa':'ok')+'">'+esc(PERFIS[u.perfil]||u.perfil)+'</span></td><td style="white-space:normal;min-width:200px">'+esc(u.perfil==='master'||(u.bases||[]).indexOf('*')>=0?'Todas':(u.bases||[]).join(', ')||'—')+'</td><td>'+(u.criadoEm?new Date(u.criadoEm).toLocaleDateString('pt-BR'):'—')+'</td><td><div class="tools"><button type="button" class="btn sm" data-uedit="'+i+'">Editar</button><button type="button" class="btn sm ghost" data-udel="'+i+'"'+(S.platAdmin?'':' disabled')+'>Remover</button></div></td></tr>'}).join('')+'</tbody></table></div>':'<p class="note">Nenhum usuário cadastrado ainda.</p>');
+    users.length?'<div class="tbx"><table><thead><tr><th>Usuário</th><th>E-mail</th><th>'+(window.__SB?'Acesso':'Código de acesso')+'</th><th>Perfil</th><th>Bases</th><th>Criado em</th><th></th></tr></thead><tbody>'+users.map(function(u,i){return '<tr><td data-uid="'+esc(u.id||'')+'" data-unome="'+esc(u.nome||'')+'">'+esc(u.nome||'—')+'</td><td>'+esc(u.email||'—')+'</td><td>'+(window.__SB?(u.email?'<button type="button" class="btn sm red" data-usenha="'+i+'">Criar acesso / senha</button>':'<span class="note">cadastre o e-mail</span>'):u.codigo?'<b style="letter-spacing:.08em">'+esc(u.codigo)+'</b> <button type="button" class="btn sm" data-ucopy="'+esc(u.codigo)+'">Copiar</button>':'<button type="button" class="btn sm" data-ugen="'+i+'"'+(S.platAdmin?'':' disabled')+'>Gerar código</button>')+'</td><td><span class="st '+(u.perfil==='master'?'no':u.perfil==='editor'?'wa':'ok')+'">'+esc(PERFIS[u.perfil]||u.perfil)+'</span></td><td style="white-space:normal;min-width:200px">'+esc(u.perfil==='master'||(u.bases||[]).indexOf('*')>=0?'Todas':(u.bases||[]).join(', ')||'—')+'</td><td>'+(u.criadoEm?new Date(u.criadoEm).toLocaleDateString('pt-BR'):'—')+'</td><td><div class="tools"><button type="button" class="btn sm" data-uedit="'+i+'">Editar</button><button type="button" class="btn sm ghost" data-udel="'+i+'"'+(S.platAdmin?'':' disabled')+'>Remover</button></div></td></tr>'}).join('')+'</tbody></table></div>':'<p class="note">Nenhum usuário cadastrado ainda.</p>');
   return h}
 function wireUsers(){
   var cfg=S.ui.ucfg,inp=$('#upick'),box=$('#usugg');
@@ -1524,6 +1554,7 @@ $('#view').addEventListener('click',function(e){
   if(b.closest('#blN')){S.ui.blN=+b.dataset.n;render();return}
   if(b.closest('#fw')){S.ui.fw=+b.dataset.n;render();return}
   if(b.dataset.uedit!=null){var u=S.acc.users[+b.dataset.uedit];S.ui.ucfg={idx:+b.dataset.uedit,perfil:u.perfil,bases:(u.bases||[]).slice(),nome:u.nome||'',email:u.email||'',id:u.id||null,pick:u.id?(u.nome||'Pessoa selecionada'):''};render();window.scrollTo(0,0);return}
+  if(b.dataset.usenha!=null){if(window.__sbSenhaDlg)window.__sbSenhaDlg(S.acc.users[+b.dataset.usenha]);return}
   if(b.dataset.ucopy){var c=b.dataset.ucopy;try{navigator.clipboard.writeText(c).then(function(){toast('Código copiado','ok')},function(){toast('Código: '+c,'ok')})}catch(x){toast('Código: '+c,'ok')}return}
   if(b.dataset.ugen!=null){var gi=+b.dataset.ugen,gl=S.acc.users.slice();gl[gi]=Object.assign({},gl[gi],{codigo:genCode()});saveUsers(gl).then(function(){toast('Código gerado','ok')},function(){toast('Não foi possível salvar.')});return}
   if(b.dataset.rok){var rq=S.reqs[b.dataset.rok];S.ui.ucfg={idx:-1,perfil:'gestor',bases:[],nome:'',email:rq.email||'',id:rq.id,pick:'Pessoa do pedido de acesso'};render();window.scrollTo(0,0);return}
