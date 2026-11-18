@@ -1722,14 +1722,32 @@ $('#btnBkp').addEventListener('click',async function(){if(!can('users'))return;
   var data=new TextEncoder().encode(JSON.stringify(b));
   try{if(!S.dl)throw 0;var r=await S.dl.save({filename:'erp_pessoas_backup_'+todayISO()+'.json',data:data});if(r&&r.status==='saved')toast('Backup salvo: '+int(n)+' registros','ok')}catch(e){toast('Não foi possível salvar o backup.')}});
 $('#btnRest').addEventListener('click',function(){if(!can('users')||!window.__SB)return;
-  modal('Restaurar backup','Migração','<p>Escolha o arquivo <b>erp_pessoas_backup_….json</b> gerado no ERP do Claude (botão Backup completo). Os registros do arquivo são gravados neste ERP; registros com o mesmo identificador são substituídos pela versão do arquivo e nada mais é apagado.</p><input type="file" id="bkFile" accept=".json,application/json"><div id="bkInfo" class="note"></div>','Restaurar',async function(){
+  modal('Restaurar backup','Migração','<p>Escolha o arquivo <b>erp_pessoas_backup_….json</b> gerado no ERP do Claude (botão Backup completo). O ERP mescla o arquivo com os dados atuais: lançamentos de presença ficam com a versão mais recente de cada dia, usuários novos são acrescentados sem mudar os existentes, edições de colaborador ficam com a mais recente e as planilhas importadas só são trocadas se a importação do arquivo for mais nova. Nada é apagado.</p><input type="file" id="bkFile" accept=".json,application/json"><div id="bkInfo" class="note"></div>','Restaurar',async function(){
     var f=$('#bkFile').files[0];if(!f)throw uErr('Escolha o arquivo de backup.');var txt=await f.text(),b;try{b=JSON.parse(txt)}catch(e){throw uErr('Arquivo inválido.')}
     if(!b||!b.cols)throw uErr('Este arquivo não é um backup do ERP de Pessoas.');
-    var rows=[];Object.keys(b.cols).forEach(function(c){if(['base','lanc','acessos','solicitacoes','info'].indexOf(c)<0)return;Object.keys(b.cols[c]||{}).forEach(function(id){rows.push({col:c,id:id,data:b.cols[c][id],updated_at:new Date().toISOString()})})});
+    var ok=$('#mok');if(ok)ok.textContent='Comparando com os dados atuais…';
+    var cur={};for(var from=0;;from+=500){var q=await window.__SB.from('erp_docs').select('col,id,data').range(from,from+499);if(q.error)throw uErr('Erro ao ler os dados atuais: '+q.error.message);q.data.forEach(function(x){(cur[x.col]=cur[x.col]||{})[x.id]=x.data});if(q.data.length<500)break}
+    var now=new Date().toISOString(),rows=[],st={novos:0,mesclados:0,mantidos:0};
+    var put=function(c,id,d,k){rows.push({col:c,id:id,data:d,updated_at:now});st[k]++};
+    var newer=function(a,c){return (a&&a.t||'')>(c&&c.t||'')};
+    var lastT=function(d){var h=(d&&d.hist)||[],t='';h.forEach(function(x){if((x.t||'')>t)t=x.t||''});return t||(d&&d.em)||''};
+    var bkImp=(b.cols.info&&b.cols.info.importacao&&b.cols.info.importacao.importadoEm)||'',curImp=(cur.info&&cur.info.importacao&&cur.info.importacao.importadoEm)||'',takeImp=bkImp>curImp;
+    var IMP={pres:1,cad:1,med:1,bh:1,bat:1,he:1};
+    Object.keys(b.cols).forEach(function(c){if(['base','lanc','acessos','solicitacoes','info'].indexOf(c)<0)return;var src=b.cols[c]||{},have=cur[c]||{};
+      Object.keys(src).forEach(function(id){var nd=src[id],od=have[id];
+        if(od===undefined){if(c==='base'&&nd&&IMP[nd.tipo]&&!takeImp)return;put(c,id,nd,'novos');return}
+        if(c==='lanc'){var m=JSON.parse(JSON.stringify(od)),ch=false;m.d=m.d||{};Object.keys(nd.d||{}).forEach(function(dia){if(!m.d[dia]||newer(nd.d[dia],m.d[dia])){m.d[dia]=nd.d[dia];ch=true}});
+          if(nd.st&&(!m.st||newer(nd.st,m.st))){m.st=nd.st;ch=true}if(ch)put(c,id,m,'mesclados');else st.mantidos++;return}
+        if(c==='acessos'){var us=(od.users||[]).slice(),ems={};us.forEach(function(u){if(u.email)ems[u.email.toLowerCase()]=1});var add=(nd.users||[]).filter(function(u){return u.email&&!ems[u.email.toLowerCase()]});
+          if(add.length)put(c,id,Object.assign({},od,{users:us.concat(add)}),'mesclados');else st.mantidos++;return}
+        if(c==='info'){if(takeImp)put(c,id,nd,'mesclados');else st.mantidos++;return}
+        if(c==='base'&&nd&&(nd.tipo==='ovc'||nd.tipo==='ovt')){if(lastT(nd)>lastT(od))put(c,id,nd,'mesclados');else st.mantidos++;return}
+        if(c==='base'&&nd&&IMP[nd.tipo]&&takeImp){put(c,id,nd,'mesclados');return}
+        st.mantidos++})});
     rows.sort(function(a,c){return (a.col==='acessos'?1:0)-(c.col==='acessos'?1:0)});
-    var ok=$('#mok');for(var i=0;i<rows.length;i+=40){if(ok)ok.textContent='Gravando '+Math.min(rows.length,i+40)+' de '+rows.length+'…';var r=await window.__SB.from('erp_docs').upsert(rows.slice(i,i+40));if(r.error)throw uErr('Erro ao gravar: '+r.error.message)}
-    audLog({acao:'Importação',ck:'',n:'',m:'',base:'',det:'Backup restaurado ('+f.name+'): '+rows.length+' registros'});
-    toast('Backup restaurado: '+int(rows.length)+' registros. Recarregando…','ok');setTimeout(function(){location.reload()},1500)});
+    for(var i=0;i<rows.length;i+=40){if(ok)ok.textContent='Gravando '+Math.min(rows.length,i+40)+' de '+rows.length+'…';var r=await window.__SB.from('erp_docs').upsert(rows.slice(i,i+40));if(r.error)throw uErr('Erro ao gravar: '+r.error.message)}
+    audLog({acao:'Importação',ck:'',n:'',m:'',base:'',det:'Backup sincronizado ('+f.name+'): '+st.novos+' novos, '+st.mesclados+' mesclados, '+st.mantidos+' mantidos'});
+    toast('Sincronizado: '+st.novos+' novos, '+st.mesclados+' mesclados. Recarregando…','ok');setTimeout(function(){location.reload()},1500)});
   setTimeout(function(){var fi=$('#bkFile');if(fi)fi.onchange=function(){var f=this.files[0];$('#bkInfo').textContent=f?f.name+' · '+Math.round(f.size/1024)+' KB':''}},0)});
 $('#btnImport').addEventListener('click',function(){if(!can('import'))return;imp={file:null,parsed:null,keep:true,discard:false,lock:true,busy:false,msg:null,err:null};drawImport()});
 function drawImport(){
