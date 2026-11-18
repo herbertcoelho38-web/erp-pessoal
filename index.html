@@ -697,11 +697,11 @@ function addCnt(t,s){for(var k in s)t[k]=(t[k]||0)+s[k];return t}
 
 /* ---------- estado ---------- */
 var S={db:null,user:null,dl:null,me:null,owner:false,platAdmin:false,canWrite:null,
-  docs:{},info:null,acc:null,lanc:{},transf:{},colab:{},ld:{base:false,acc:false,lanc:false},failed:null,
+  docs:{},info:null,vagas:{},vcfg:null,acc:null,lanc:{},transf:{},colab:{},ld:{base:false,acc:false,lanc:false},failed:null,
   role:null,D:null,f:newF(),view:'painel',dq:'',
   ui:{pm:null,pmode:'grade',pdia:null,cpage:0,csort:{k:'n',d:1},bl:{ativos:true},fw:90,fall:false,medT:'',medPage:0,bhq:'',ucfg:null,blN:30}};
 function newF(){return {q:'',colab:null,meses:new Set(),bases:new Set(),sit:'',deps:new Set(),de:'',ate:''}}
-var VIEWS=[['painel','Painel'],['presenca','Presença'],['batidas','Batidas de ponto'],['colaboradores','Colaboradores'],['turnover','Turnover'],['banco-horas','Banco de horas'],['medidas','Medidas disciplinares'],['black-list','Black list'],['ferias','Férias'],['auditoria','Auditoria'],['usuarios','Usuários']];
+var VIEWS=[['painel','Painel'],['presenca','Presença'],['batidas','Batidas de ponto'],['colaboradores','Colaboradores'],['vagas','Vagas'],['turnover','Turnover'],['banco-horas','Banco de horas'],['medidas','Medidas disciplinares'],['black-list','Black list'],['ferias','Férias'],['auditoria','Auditoria'],['usuarios','Usuários']];
 var PERFIS={master:'Master',editor:'Editor',gestor:'Gestor de base'};
 
 /* ---------- perfis e permissões ---------- */
@@ -898,7 +898,7 @@ document.addEventListener('click',function(e){if(!e.target.closest('.search'))$$
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){$$('.sugg').forEach(function(b){b.hidden=true});closePop();if(!(imp&&imp.busy))closeLayer()}});
 
 /* ---------- navegação ---------- */
-function allowedViews(){return VIEWS.filter(function(v){return (v[0]!=='usuarios'&&v[0]!=='auditoria')||can('users')})}
+function allowedViews(){return VIEWS.filter(function(v){if(v[0]==='vagas')return vagasOn();return (v[0]!=='usuarios'&&v[0]!=='auditoria')||can('users')})}
 function setView(v){if(!allowedViews().some(function(x){return x[0]===v}))v='painel';S.view=v;if(location.hash!=='#'+v){try{history.replaceState(null,'','#'+v)}catch(e){location.hash=v}}render();window.scrollTo(0,0)}
 window.addEventListener('hashchange',function(){var v=location.hash.slice(1);if(v&&v!==S.view)setView(v)});
 $('#tabs').addEventListener('click',function(e){var b=e.target.closest('button');if(b)setView(b.dataset.v)});
@@ -918,9 +918,9 @@ function render(){
   $('#tabs').hidden=false;$('#tabs').innerHTML=tv.map(function(v){return '<button type="button" data-v="'+v[0]+'" class="'+(S.view===v[0]?'on':'')+'"'+(S.view===v[0]?' aria-current="page"':'')+'>'+v[1]+'</button>'}).join('');
   if(!S.D){view.innerHTML='<div class="empty"><h2>Carregando</h2><p>Buscando os dados salvos no ERP.</p></div>';return}
   try{renderFilters();drawHero()}catch(e){try{console.error(e)}catch(x){}}
-  if(!S.D.months.length&&!S.D.cad.length&&S.view!=='usuarios'){
+  if(!S.D.months.length&&!S.D.cad.length&&S.view!=='usuarios'&&S.view!=='vagas'){
     view.innerHTML='<div class="empty"><h2>Nenhuma base carregada</h2><p>'+(can('import')?'Use <b>Importar planilha</b> na barra lateral. O ERP lê todas as abas do arquivo: presença de cada mês, colaboradores ativos e desligados, banco de horas e medidas disciplinares.':'A base ainda não foi carregada. Um usuário Master ou Editor precisa importar a planilha.')+'</p></div>';return}
-  var fn={painel:vPainel,presenca:vPresenca,colaboradores:vColab,turnover:vTurnover,'banco-horas':vBanco,medidas:vMedidas,'black-list':vBlack,ferias:vFerias,auditoria:vAuditoria,batidas:vBatidas,usuarios:vUsuarios}[S.view];
+  var fn={painel:vPainel,presenca:vPresenca,colaboradores:vColab,turnover:vTurnover,'banco-horas':vBanco,medidas:vMedidas,'black-list':vBlack,ferias:vFerias,auditoria:vAuditoria,batidas:vBatidas,vagas:vVagas,usuarios:vUsuarios}[S.view];
   try{view.innerHTML=fn()}catch(e){try{console.error(e)}catch(x){}view.innerHTML='<div class="empty"><h2>Sem dados para exibir</h2><p>Ajuste os filtros ou recarregue a página.</p></div>';return}
   if(S.view==='colaboradores'){var bi=$('#bigq');if(bi)wireSearch(bi,$('#bigsugg'),function(k){openColab(k)});var ei=$('#editq');if(ei)wireSearch(ei,$('#editsugg'),function(k){var o=S.D.C[k];if(o)colabForm(o)})}
   if(S.view==='usuarios')wireUsers();
@@ -1565,6 +1565,97 @@ $('#view').addEventListener('change',function(e){var t=e.target;
   if(t.id==='blAt'){S.ui.bl.ativos=t.checked;render()}else if(t.id==='fall'){S.ui.fall=t.checked;render()}});
 $('#view').addEventListener('input',function(e){if(e.target.id==='bhq'){S.ui.bhq=e.target.value;var pos=e.target.selectionStart;render();var n=$('#bhq');if(n){n.focus();n.setSelectionRange(pos,pos)}}});
 
+/* ---------- VAGAS: solicitação, aprovação do Master, status e SLA ---------- */
+var VST=[['aguardando','Aguardando aprovação do Master','wa'],['office','Pendente de aprovação do Office','wa'],['claro','Pendente de aprovação da Claro','wa'],['doc','Documentação',''],['fechada','Fechada (vaga preenchida)','ok'],['reprovado','Reprovado','no']];
+var VSTL={};VST.forEach(function(s){VSTL[s[0]]=s});
+var VPOS=['office','claro','doc','fechada','reprovado'];
+var VMOT=['Aumento de quadro','Substituição','Temporária'];
+function vagasOn(){return !!window.__SB}
+function vSla(){var c=S.vcfg||{};return c.slaDias>0?c.slaDias:30}
+function vEnc(v){return v.status==='fechada'||v.status==='reprovado'}
+function vDias(v){if(!v.aprov||v.aprov.st!=='aprovada'||!v.aprov.em)return null;var a=v.aprov.em.slice(0,10),b=vEnc(v)&&v.encEm?v.encEm.slice(0,10):todayISO();return Math.max(0,daysBetween(a,b))}
+function vEspera(v){var a=(v.criadoEm||'').slice(0,10);if(!a)return 0;var b=v.aprov&&v.aprov.em?v.aprov.em.slice(0,10):todayISO();return Math.max(0,daysBetween(a,b))}
+function vSlaSt(v){var d=vDias(v),s=vSla();if(d==null)return v.status==='reprovado'?['Reprovada antes de abrir','']:['Aguardando aprovação','wa'];
+  if(v.status==='fechada')return d<=s?['Fechada no prazo','ok']:['Fechada fora do prazo','no'];
+  if(v.status==='reprovado')return ['Encerrada (reprovada)',''];
+  if(d>s)return ['Atrasada '+(d-s)+' d','no'];if(s-d<=3)return ['Vence em '+(s-d)+' d','wa'];return ['No prazo · faltam '+(s-d)+' d','ok']}
+function vLastObs(v){var h=(v.hist||[]).filter(function(x){return x.obs});return h.length?h[h.length-1].obs:''}
+function vList(){return Object.keys(S.vagas||{}).filter(function(k){return k!=='config'}).map(function(k){return S.vagas[k]}).filter(function(v){return v&&v.base&&inScope(v.base)&&(!S.f.bases.size||S.f.bases.has(v.base))})}
+function vFilt(){var st=S.ui.vgSt||'',q=nk(S.ui.vgQ||''),tm=S.ui.vgTm||'';
+  return vList().filter(function(v){if(st==='abertas'){if(!(v.aprov&&v.aprov.st==='aprovada')||vEnc(v))return false}else if(st==='atrasadas'){if(vEnc(v)||vDias(v)==null||vDias(v)<=vSla())return false}else if(st&&v.status!==st)return false;
+    if(q&&nk([v.cargo,v.base,v.solic&&v.solic.nome,v.num,v.subst].join(' ')).indexOf(q)<0)return false;
+    if(hasPer()&&!dayIn((v.criadoEm||'').slice(0,10)))return false;return true}).sort(function(a,b){return (b.criadoEm||'')<(a.criadoEm||'')?-1:1})}
+function vagaPill(s){var x=VSTL[s]||[s,s,''];return '<span class="st '+x[2]+'">'+esc(x[1])+'</span>'}
+function vVagas(){
+  var all=vList(),L=vFilt(),sla=vSla(),isM=S.role.perfil==='master';
+  var ag=all.filter(function(v){return v.status==='aguardando'}),ab=all.filter(function(v){return v.aprov&&v.aprov.st==='aprovada'&&!vEnc(v)}),
+      at=ab.filter(function(v){return vDias(v)>sla}),fe=all.filter(function(v){return v.status==='fechada'}),
+      tm=fe.length?fe.reduce(function(s,v){return s+(vDias(v)||0)},0)/fe.length:0,fp=fe.filter(function(v){return vDias(v)<=sla}).length;
+  S._exp=S._exp||{};S._exp.vagas=L;
+  var h='<section class="kpis">'+kpi('Aguardando aprovação',int(ag.length),ag.length?'mais antiga há '+Math.max.apply(null,ag.map(vEspera))+' dias':'nenhuma pendente','lead')+
+    kpi('Vagas em aberto',int(ab.reduce(function(s,v){return s+(+v.qtd||1)},0)),ab.length+' solicitações aprovadas em andamento')+
+    kpi('Atrasadas no SLA',int(at.length),'acima de '+sla+' dias abertas')+
+    kpi('Fechadas',int(fe.length),fe.length?pct(fp/fe.length*100,0)+' dentro do SLA':'nenhuma fechada ainda')+
+    kpi('Tempo médio de fechamento',fe.length?tm.toFixed(1).replace('.',',')+' d':'—','da aprovação ao fechamento')+
+    kpi('SLA de fechamento',sla+' dias',S.vcfg&&S.vcfg.em?'definido em '+dbr(S.vcfg.em.slice(0,10)):'padrão do sistema')+'</section>';
+  var tools='<div class="tools"><button type="button" class="btn red sm" data-vg="nova">+ Solicitar vaga</button>'+expTools('vagas').replace('<div class="tools">','').replace(/<\/div>$/,'')+'</div>';
+  var bar='<div class="pper" style="margin-bottom:10px"><div class="seg2" id="vgSt">'+[['','Todas'],['abertas','Em aberto'],['atrasadas','Atrasadas']].concat(VST.map(function(s){return [s[0],s[1].replace(' (vaga preenchida)','')]})).map(function(s){return '<button type="button" data-vst="'+s[0]+'" class="'+((S.ui.vgSt||'')===s[0]?'on':'')+'">'+esc(s[1])+'</button>'}).join('')+'</div>'+
+    '<label style="flex:1;min-width:200px">Buscar<input type="text" id="vgQ" value="'+esc(S.ui.vgQ||'')+'" placeholder="Cargo, base, solicitante ou nº"></label>'+
+    (isM?'<label>SLA (dias)<input type="number" id="vgSla" min="1" max="365" value="'+sla+'" style="width:80px"></label><button type="button" class="btn sm" data-vg="sla">Salvar SLA</button>':'')+'</div>';
+  var tb=L.length?'<div class="tbx"><table><thead><tr><th>Nº</th><th>Solicitada em</th><th>Base</th><th>Cargo</th><th class="r">Qtd</th><th>Motivo</th><th>Solicitante</th><th>Status</th><th>Aprovada em</th><th class="r">Dias em aberto</th><th>SLA</th><th>Última observação</th><th></th></tr></thead><tbody>'+
+    L.map(function(v){var s=vSlaSt(v),d=vDias(v);return '<tr class="'+(s[1]==='no'&&!vEnc(v)?'hot':'')+'"><td><b>'+esc(v.num||'')+'</b></td><td>'+dbr((v.criadoEm||'').slice(0,10))+'</td><td>'+esc(v.base)+'</td><td>'+esc(v.cargo)+'</td><td class="r">'+esc(v.qtd||1)+'</td><td>'+esc(v.motivo||'')+(v.subst?'<br><small class="note">no lugar de '+esc(v.subst)+'</small>':'')+'</td><td>'+esc(v.solic&&v.solic.nome||'')+'</td><td>'+vagaPill(v.status)+'</td><td>'+(v.aprov&&v.aprov.st==='aprovada'?dbr(v.aprov.em.slice(0,10)):v.status==='aguardando'?'<span class="note">há '+vEspera(v)+' d</span>':'—')+'</td><td class="r"><b>'+(d==null?'—':d)+'</b></td><td><span class="st '+s[1]+'">'+esc(s[0])+'</span></td><td class="wrapc">'+esc(vLastObs(v))+'</td><td><button type="button" class="btn sm'+(isM&&v.status==='aguardando'?' red':'')+'" data-vg="abrir" data-id="'+esc(v.id)+'">'+(isM&&v.status==='aguardando'?'Analisar':'Abrir')+'</button></td></tr>'}).join('')+'</tbody></table></div>':
+    '<p class="note">'+(all.length?'Nenhuma vaga nos filtros escolhidos.':'Nenhuma vaga solicitada ainda. Use “+ Solicitar vaga”.')+'</p>';
+  return h+card('Solicitações de vagas',(isM?'Você aprova ou reprova as solicitações. ':'Toda solicitação passa pela aprovação do Master antes de ser trabalhada. ')+'O tempo em aberto conta a partir da aprovação; o SLA vale até o fechamento.',bar+tb,tools)}
+function vSave(v){var d=JSON.parse(JSON.stringify(v)),prev=S.vagas[v.id];S.vagas[v.id]=d;return S.db.doc('vagas/'+v.id).set(d).catch(function(e){if(prev)S.vagas[v.id]=prev;else delete S.vagas[v.id];var x=new Error('x');x.uMsg=e&&e.code==='permission_denied'?'Seu perfil não tem permissão para esta ação.':'Não foi possível salvar. Tente de novo.';throw x})}
+function vHist(v,acao,obs,st){(v.hist=v.hist||[]).push({t:new Date().toISOString(),u:myId(),por:myName(),acao:acao,obs:obs||'',status:st||v.status})}
+function vNova(){
+  var bases=(S.D?S.D.bases:[]).filter(function(b){return inScope(b)&&b!=='SEM BASE'});
+  if(!bases.length){toast('Nenhuma base vinculada ao seu perfil.');return}
+  modal('Solicitar vaga',PERFIS[S.role.perfil]||'',
+    '<div class="form"><label>Base<select id="vbB">'+bases.map(function(b){return '<option>'+esc(b)+'</option>'}).join('')+'</select></label>'+
+    '<label>Cargo / função<input type="text" id="vbC" placeholder="Ex.: Técnico de campo"></label>'+
+    '<label>Quantidade<input type="number" id="vbQ" min="1" value="1"></label>'+
+    '<label>Motivo<select id="vbM">'+VMOT.map(function(m){return '<option>'+m+'</option>'}).join('')+'</select></label>'+
+    '<label class="full" id="vbSw">Substitui quem? (opcional)<input type="text" id="vbS" placeholder="Nome do colaborador que saiu"></label>'+
+    '<label>Escala / turno<input type="text" id="vbT" placeholder="Ex.: 6x1, 08h às 17h"></label>'+
+    '<label>Data desejada de início<input type="date" id="vbD"></label>'+
+    '<label class="full">Justificativa / observação<textarea id="vbO" rows="3" style="width:100%;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:8px;font:inherit"></textarea></label></div>'+
+    '<p class="note" style="margin:0">A vaga fica como “Aguardando aprovação do Master” e só começa a ser trabalhada depois de aprovada.</p>','Enviar solicitação',
+    async function(){var c=$('#vbC').value.trim(),q=Math.max(1,parseInt($('#vbQ').value,10)||1);if(!c){var x=new Error('x');x.uMsg='Informe o cargo.';throw x}
+      var now=new Date(),id='vg_'+now.getTime().toString(36)+'_'+Math.random().toString(36).slice(2,6),num='VG-'+todayISO().slice(2).replace(/-/g,'')+'-'+String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0')+String(now.getSeconds()).padStart(2,'0');
+      var v={id:id,num:num,base:$('#vbB').value,cargo:c,qtd:q,motivo:$('#vbM').value,subst:$('#vbS').value.trim(),turno:$('#vbT').value.trim(),inicio:$('#vbD').value||'',just:$('#vbO').value.trim(),
+        solic:{u:myId(),nome:myName(),email:S.me&&S.me.email||''},criadoEm:now.toISOString(),aprov:{st:'pendente'},status:'aguardando',hist:[]};
+      vHist(v,'Solicitação criada',v.just,'aguardando');await vSave(v);toast('Solicitação '+num+' enviada para aprovação','ok')})}
+function vAbrir(id){
+  var v=S.vagas[id];if(!v)return;var isM=S.role.perfil==='master',isE=S.role.perfil==='editor',ap=v.aprov&&v.aprov.st==='aprovada',d=vDias(v),s=vSlaSt(v);
+  var row=function(l,x){return '<div><span>'+l+'</span><b>'+(x||'—')+'</b></div>'};
+  var info='<div class="dgrid">'+row('Nº',esc(v.num))+row('Base',esc(v.base))+row('Cargo',esc(v.cargo))+row('Quantidade',esc(v.qtd||1))+row('Motivo',esc(v.motivo)+(v.subst?' · '+esc(v.subst):''))+row('Escala / turno',esc(v.turno))+
+    row('Início desejado',v.inicio?dbr(v.inicio):'')+row('Solicitante',esc(v.solic&&v.solic.nome||''))+row('Solicitada em',v.criadoEm?new Date(v.criadoEm).toLocaleString('pt-BR'):'')+
+    row('Status',vagaPill(v.status).replace('<span ','<span style="display:inline-block" '))+row('Aprovação',v.aprov&&v.aprov.st==='aprovada'?'Aprovada por '+esc(v.aprov.por||'')+' em '+dbr(v.aprov.em.slice(0,10)):v.aprov&&v.aprov.st==='reprovada'?'Reprovada por '+esc(v.aprov.por||''):'Aguardando há '+vEspera(v)+' dias')+
+    row('Dias em aberto / SLA',(d==null?'—':d+' de '+vSla()+' dias')+' · <span style="display:inline-block" class="st '+s[1]+'">'+esc(s[0])+'</span>')+'</div>';
+  var hist='<div class="dsec"><h3>Histórico e observações</h3><div style="display:flex;flex-direction:column;gap:6px">'+(v.hist||[]).slice().reverse().map(function(x){return '<div style="background:var(--surface-2);border-radius:8px;padding:8px 10px;font-size:12.5px"><b>'+esc(x.acao)+'</b> · '+esc(x.por||'')+' · '+new Date(x.t).toLocaleString('pt-BR')+(x.status?' · '+vagaPill(x.status):'')+(x.obs?'<div style="margin-top:4px;white-space:pre-wrap">'+esc(x.obs)+'</div>':'')+'</div>'}).join('')+'</div></div>';
+  var act='';
+  if(isM&&v.status==='aguardando')act='<div class="dsec"><h3>Aprovação</h3><div class="form"><label>Status inicial após aprovar<select id="vaS">'+VPOS.filter(function(k){return k!=='fechada'&&k!=='reprovado'}).map(function(k){return '<option value="'+k+'">'+esc(VSTL[k][1])+'</option>'}).join('')+'</select></label><label class="full">Observação<textarea id="vaO" rows="2" style="width:100%;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:8px;font:inherit"></textarea></label></div><div class="mfoot" style="margin-top:8px"><button type="button" class="btn ghost" data-vg="reprovar" data-id="'+esc(id)+'">Reprovar</button><button type="button" class="btn red" data-vg="aprovar" data-id="'+esc(id)+'">Aprovar vaga</button></div></div>';
+  else if((isM||isE)&&ap&&!vEnc(v)||isM&&ap)act='<div class="dsec"><h3>Atualizar status</h3><div class="form"><label>Status<select id="vaS">'+VPOS.map(function(k){return '<option value="'+k+'"'+(v.status===k?' selected':'')+'>'+esc(VSTL[k][1])+'</option>'}).join('')+'</select></label><label class="full">Observação<textarea id="vaO" rows="2" style="width:100%;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:8px;font:inherit"></textarea></label></div><div class="mfoot" style="margin-top:8px"><button type="button" class="btn red" data-vg="status" data-id="'+esc(id)+'">Salvar</button></div></div>';
+  else act='<div class="dsec"><h3>Adicionar observação</h3><textarea id="vaO" rows="2" style="width:100%;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:8px;font:inherit"></textarea><div class="mfoot" style="margin-top:8px"><button type="button" class="btn red" data-vg="obs" data-id="'+esc(id)+'">Salvar observação</button></div></div>';
+  $('#layer').innerHTML='<div class="ovl" id="vov"><div class="modal" role="dialog" aria-modal="true" style="max-width:820px"><div class="mh"><div><div class="eyebrow">Vaga '+esc(v.num)+' · '+esc(v.base)+'</div><h2>'+esc(v.cargo)+(+v.qtd>1?' ('+v.qtd+')':'')+'</h2></div><button type="button" class="x" data-vg="fechar" aria-label="Fechar">✕</button></div><div class="mb">'+info+(v.just?'<div class="notice">'+esc(v.just)+'</div>':'')+act+'<div id="vErr"></div>'+hist+'</div></div></div>';
+  $('#vov').addEventListener('click',function(e){if(e.target.id==='vov')closeLayer()})}
+async function vAct(kind,id,btn){
+  var v=S.vagas[id];if(!v)return;v=JSON.parse(JSON.stringify(v));var o=$('#vaO')?$('#vaO').value.trim():'',st=$('#vaS')?$('#vaS').value:'',now=new Date().toISOString(),msg;
+  var err=function(t){$('#vErr').innerHTML='<div class="err">'+esc(t)+'</div>'};
+  if(kind==='aprovar'){v.aprov={st:'aprovada',u:myId(),por:myName(),em:now};v.status=st||'office';v.statusEm=now;vHist(v,'Vaga aprovada',o,v.status);msg='Vaga aprovada'}
+  else if(kind==='reprovar'){if(!o){err('Escreva o motivo da reprovação na observação.');return}v.aprov={st:'reprovada',u:myId(),por:myName(),em:now};v.status='reprovado';v.encEm=now;vHist(v,'Solicitação reprovada',o,'reprovado');msg='Solicitação reprovada'}
+  else if(kind==='status'){if(st===v.status&&!o){err('Mude o status ou escreva uma observação.');return}if(st!==v.status){v.status=st;v.statusEm=now;if(vEnc(v))v.encEm=now;else delete v.encEm}vHist(v,st!==S.vagas[id].status?'Status alterado':'Observação',o,v.status);msg='Vaga atualizada'}
+  else if(kind==='obs'){if(!o){err('Escreva a observação.');return}vHist(v,'Observação',o,v.status);msg='Observação salva'}
+  btn.disabled=true;try{await vSave(v);toast(msg,'ok');vAbrir(id);render()}catch(x){btn.disabled=false;err(x&&x.uMsg||'Não foi possível salvar.')}}
+document.addEventListener('click',function(e){var b=e.target.closest('[data-vg]');if(b){var k=b.dataset.vg;
+  if(k==='nova')vNova();else if(k==='abrir')vAbrir(b.dataset.id);else if(k==='fechar')closeLayer();
+  else if(k==='sla'){var n=parseInt($('#vgSla').value,10);if(!(n>0&&n<=365)){toast('Informe um SLA entre 1 e 365 dias.');return}var c={slaDias:n,u:myId(),por:myName(),em:new Date().toISOString()};
+    S.db.doc('vagas/config').set(c).then(function(){S.vcfg=c;toast('SLA de '+n+' dias salvo','ok');render()},function(){toast('Somente o Master pode alterar o SLA.')})}
+  else vAct(k,b.dataset.id,b);return}
+  var s=e.target.closest('[data-vst]');if(s){S.ui.vgSt=s.dataset.vst;render()}});
+document.addEventListener('input',function(e){if(e.target.id==='vgQ'){var v=e.target.value,p=e.target.selectionStart;S.ui.vgQ=v;clearTimeout(S._vgt);S._vgt=setTimeout(function(){render();var n=$('#vgQ');if(n){n.focus();n.setSelectionRange(p,p)}},250)}});
+
 /* ---------- modal genérico ---------- */
 function closeLayer(){$('#layer').innerHTML=''}
 function modal(t,eb,body,okTxt,fn){
@@ -1675,6 +1766,7 @@ function expData(id){
   if(id==='batidas')return {t:'Batidas de ponto · '+dbr(E.batDia||''),f:'batidas_'+(E.batDia||''),land:true,head:['Matrícula','Colaborador','Base','Entrada','Saída intervalo','Retorno','Saída','Outras','Horas','Situação','Ocorrência','Presença no ERP','Divergência'],body:(E.batidas||[]).map(function(r){var b=r.pun.map(function(x){return x.slice(0,5)});return [r.m,title(r.n),r.base,b[0]||'',b[1]||'',b[2]||'',b[3]||'',b.slice(4).join(' '),r.hrs?hm(r.hrs):'',BST[r.st][1],r.ot,r.pc?(CODE[r.pc]?CODE[r.pc].l:r.pc):'',r.dv]})};
   if(id==='auditoria')return {t:'Auditoria de alterações',f:'auditoria',land:true,head:['Data e hora','Usuário','Tipo','Matrícula','Colaborador','Base','Alteração'],body:(E.auditoria||[]).map(function(r){return [r.t?new Date(r.t).toLocaleString('pt-BR'):'',r.quem,r.tipo,r.m,r.n,r.base,r.det]})};
   if(id==='ferias')return {t:'Férias · período aquisitivo próximo ao vencimento',f:'ferias',land:true,head:['Matrícula','Nome','Base','Admissão','Anos','Início período','Fim período','Limite concessão','Dias','Férias lançadas'],body:(E.ferias||[]).map(function(r){var f=r.f;return [r.o.m,r.o.n,r.o.base,dbr(r.o.cad.adm),f.anos,dbr(f.ini),dbr(f.fim),f.anos>=1?dbr(f.lim):'',f.dias,f.fer]})};
+  if(id==='vagas')return {t:'Solicitações de vagas · SLA '+vSla()+' dias',f:'vagas',land:true,head:['Nº','Solicitada em','Base','Cargo','Qtd','Motivo','Substitui','Solicitante','Status','Aprovada em','Dias em aberto','SLA','Última observação'],body:(E.vagas||[]).map(function(v){var d=vDias(v);return [v.num,dbr((v.criadoEm||'').slice(0,10)),v.base,v.cargo,v.qtd||1,v.motivo,v.subst||'',v.solic&&v.solic.nome||'',(VSTL[v.status]||[0,v.status])[1],v.aprov&&v.aprov.st==='aprovada'?dbr(v.aprov.em.slice(0,10)):'',d==null?'':d,vSlaSt(v)[0],vLastObs(v)]})};
   return null}
 function filtDesc(){var f=S.f,a=[];if(S.role.bases!=='*')a.push('Bases do perfil: '+S.role.bases.join(', '));if(f.bases.size)a.push('Base: '+Array.from(f.bases).join(', '));if(f.sit)a.push('Situação: '+f.sit);if(f.deps.size)a.push('Departamento: '+Array.from(f.deps).join(', '));if(f.meses.size)a.push('Meses: '+Array.from(f.meses).map(mabr).join(', '));if(f.colab||f.q)a.push('Colaborador: '+(f.colab&&S.D.C[f.colab]?S.D.C[f.colab].n:f.q));return a.join(' · ')}
 async function doExport(id,kind){
@@ -1720,6 +1812,7 @@ async function init(){
   S.db.collection('lanc').onSnapshot(function(snap){var l={};snap.docs.forEach(function(d){if(d.exists)l[d.id]=d.data()});S.lanc=l;S.ld.lanc=true;done()},lost);
   S.db.doc('acessos/lista').onSnapshot(function(d){S.acc=d.exists?d.data():{users:[]};S.ld.acc=true;done()},lost);
   S.db.collection('solicitacoes').onSnapshot(function(snap){var r={};snap.docs.forEach(function(d){if(d.exists)r[d.id]=d.data()});S.reqs=r;if(S.ld.base&&S.ld.acc&&S.ld.lanc&&(!S.role||S.view==='usuarios'))render()},function(){});
+  if(vagasOn())S.db.collection('vagas').onSnapshot(function(snap){var r={};snap.docs.forEach(function(d){if(d.exists)r[d.id]=d.data()});S.vcfg=r.config||null;S.vagas=r;if(S.D&&S.role&&S.view==='vagas')render()},function(){});
   S.db.doc('info/importacao').onSnapshot(function(d){S.info=d.exists?d.data():null;drawHero()},function(){});
 }
 var v0=location.hash.slice(1);if(v0)S.view=v0;
