@@ -1567,9 +1567,9 @@ $('#view').addEventListener('change',function(e){var t=e.target;
 $('#view').addEventListener('input',function(e){if(e.target.id==='bhq'){S.ui.bhq=e.target.value;var pos=e.target.selectionStart;render();var n=$('#bhq');if(n){n.focus();n.setSelectionRange(pos,pos)}}});
 
 /* ---------- VAGAS: solicitação, aprovação do Master, status e SLA ---------- */
-var VST=[['aguardando','Aguardando aprovação do Gestor','wa'],['office','Pendente de aprovação do Office','wa'],['claro','Pendente de aprovação da Claro','wa'],['doc','Documentação',''],['fechada','Fechada (vaga preenchida)','ok'],['reprovado','Reprovado','no']];
+var VST=[['aguardando','Aguardando aprovação do Gestor','wa'],['office','Pendente de aprovação do Office','wa'],['claro','Pendente de aprovação da Claro','wa'],['captacao','Em captação','wa'],['doc','Documentação',''],['fechada','Fechada (vaga preenchida)','ok'],['reprovado','Reprovado','no']];
 var VSTL={};VST.forEach(function(s){VSTL[s[0]]=s});
-var VPOS=['office','claro','doc','fechada','reprovado'];
+var VPOS=['office','claro','captacao','doc','fechada','reprovado'];
 var VMOT=['Aumento de quadro','Substituição','Temporária'];
 function vagasOn(){return !!window.__SB}
 function vCargos(){var s={};((S.D&&S.D.cad)||[]).forEach(function(c){if(c.fu)s[c.fu.toUpperCase()]=1});Object.keys(S.vagas||{}).forEach(function(k){var v=S.vagas[k];if(v&&v.cargo)s[v.cargo.toUpperCase()]=1});return Object.keys(s).sort()}
