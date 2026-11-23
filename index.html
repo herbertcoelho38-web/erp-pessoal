@@ -564,6 +564,7 @@ var ErpParser = (function () {
 #sbLogin input{padding:10px 12px;font-size:15px}
 #sbLogin .lk{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
 </style>
+<script>window.__VER="20261123152750";</script>
 <script>
 /* ---- ERP de Pessoas · camada Supabase (login e banco) ---- */
 (function(){
@@ -642,6 +643,12 @@ function senhaDlg(u){
   }
   draw();document.body.appendChild(box);
 }
+function __verCheck(){if(!window.__VER||document.getElementById('verBar'))return;fetch('/version.json?t='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(j){
+  if(!j||!j.v||j.v===window.__VER||document.getElementById('verBar'))return;var d=document.createElement('div');d.id='verBar';
+  d.style.cssText='position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:250;background:#1f7a4f;color:#fff;padding:10px 14px;border-radius:10px;font:600 14px/1.3 var(--f-body);display:flex;gap:12px;align-items:center;box-shadow:0 10px 30px -10px #000;max-width:calc(100% - 24px)';
+  d.innerHTML='<span>Há uma versão nova do ERP com ajustes.</span><button type="button" style="border:0;background:#fff;color:#14532d;font-weight:700;border-radius:7px;padding:6px 12px;cursor:pointer">Atualizar agora</button>';
+  d.querySelector('button').onclick=function(){location.reload()};document.body.appendChild(d)}).catch(function(){})}
+setInterval(__verCheck,180000);document.addEventListener('visibilitychange',function(){if(!document.hidden)__verCheck()});window.addEventListener('focus',__verCheck);
 async function boot(){
   if(/type=recovery/.test(location.hash)){loginUI('nova');return}
   var s=(await sb.auth.getSession()).data.session;
